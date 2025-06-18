@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   traefik:
     image: traefik:v2.10
@@ -22,7 +20,7 @@ services:
       - web
 
   pretty-little-gift-webapp:
-    image: ghcr.io/${GITHUB_USERNAME}/pretty-little-gift-webapp:${PRETTY_VERSION:-latest}
+    image: ghcr.io/${GH_USERNAME}/pretty-little-gift-webapp:${PRETTY_VERSION:-latest}
     container_name: pretty-little-gift-webapp
     restart: unless-stopped
     labels:
@@ -36,7 +34,7 @@ services:
       - traefik
 
   people-ind-webapp:
-    image: ghcr.io/${GITHUB_USERNAME}/people-ind-webapp:${PEOPLE_VERSION:-latest}
+    image: ghcr.io/${GH_USERNAME}/people-ind-webapp:${PEOPLE_VERSION:-latest}
     container_name: people-ind-webapp
     restart: unless-stopped
     labels:
