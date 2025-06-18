@@ -1,6 +1,6 @@
 api:
   dashboard: true
-  insecure: true
+  # insecure: true
 
 entryPoints:
   web:
@@ -15,4 +15,4 @@ providers:
     network: web
 
 log:
-  level: INFO
+  level: DEBUG
