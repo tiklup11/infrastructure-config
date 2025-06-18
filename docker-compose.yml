@@ -17,7 +17,7 @@ services:
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.entrypoints=web"
       - "traefik.http.routers.dashboard.middlewares=auth"
-      - "traefik.http.middlewares.auth.basicauth.users=@dmin:$2y$05$zp2Z9fWm9ypXoFhfhnQb3eO.1AFbbrpNbDK5VnALcS5EH9PEmka3."
+      - "traefik.http.middlewares.auth.basicauth.users=@dmin:$2y$05$HjG89.WJt/rdA2GuWd0YgeVu2G1GgWVrf1VGxE.qKCGMaY6YFs5jS"
     networks:
       - web
 
