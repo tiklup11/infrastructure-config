@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+      - "3001:3001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+    networks:
+      - web
+
+  pretty-little-gift-webapp:
+    image: ghcr.io/${GITHUB_USERNAME}/pretty-little-gift-webapp:${PRETTY_VERSION:-latest}
+    container_name: pretty-little-gift-webapp
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pretty.rule=Host(`${VPS_IP}`)"
+      - "traefik.http.routers.pretty.entrypoints=web"
+      - "traefik.http.services.pretty.loadbalancer.server.port=80"
+    networks:
+      - web
+    depends_on:
+      - traefik
+
+  people-ind-webapp:
+    image: ghcr.io/${GITHUB_USERNAME}/people-ind-webapp:${PEOPLE_VERSION:-latest}
+    container_name: people-ind-webapp
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.people.rule=Host(`${VPS_IP}`)"
+      - "traefik.http.routers.people.entrypoints=people"
+      - "traefik.http.services.people.loadbalancer.server.port=80"
+    networks:
+      - web
+    depends_on:
+      - traefik
+
+networks:
+  web:
+    driver: bridge

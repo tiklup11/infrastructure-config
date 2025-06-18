@@ -1,0 +1,155 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Deployment action"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - rollback
+          - initial-setup
+      service:
+        description: "Service to deploy/rollback (ignored for initial-setup)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - traefik
+          - pretty-little-gift-webapp
+          - people-ind-webapp
+      version:
+        description: 'Version for rollback (commit SHA or "latest")'
+        required: false
+        default: "latest"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initial VPS Setup
+        if: ${{ inputs.action == 'initial-setup' }}
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "🚀 Starting initial VPS setup..."
+
+            # Create infrastructure directory
+            mkdir -p ~/infrastructure
+            cd ~/infrastructure
+
+            # Clone infrastructure repo
+            if [ -d ".git" ]; then
+              echo "Repository already exists, pulling latest..."
+              git pull origin main
+            else
+              echo "Cloning infrastructure repository..."
+              git clone https://github.com/${{ github.repository }}.git .
+            fi
+
+            # Create Docker network if it doesn't exist
+            if ! docker network ls | grep -q "web"; then
+              echo "Creating Docker network 'web'..."
+              docker network create web
+            else
+              echo "Docker network 'web' already exists"
+            fi
+
+            # Set environment variables
+            export GITHUB_USERNAME=${{ secrets.GITHUB_USERNAME }}
+            export VPS_IP=${{ secrets.VPS_HOST }}
+
+            # Start only Traefik (apps will be deployed separately)
+            echo "Starting Traefik..."
+            docker-compose up -d traefik
+
+            # Wait for Traefik to be ready
+            sleep 5
+
+            # Show status
+            echo "✅ Initial setup completed!"
+            echo ""
+            echo "Services status:"
+            docker-compose ps
+            echo ""
+            echo "Next steps:"
+            echo "1. Deploy Pretty Little Gift app by pushing to its repo"
+            echo "2. Deploy People Ind app by pushing to its repo"
+            echo "3. Make both container images public in GitHub Packages settings"
+            echo ""
+            echo "Traefik dashboard available at: http://${{ secrets.VPS_HOST }}:8080"
+
+      - name: Deploy to VPS
+        if: ${{ inputs.action != 'initial-setup' }}
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Ensure infrastructure directory exists
+            mkdir -p ~/infrastructure
+            cd ~/infrastructure
+
+            # Clone or update infrastructure repo
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/${{ github.repository }}.git .
+            else
+              git pull origin main
+            fi
+
+            # Set environment variables
+            export GITHUB_USERNAME=${{ secrets.GITHUB_USERNAME }}
+            export VPS_IP=${{ secrets.VPS_HOST }}
+
+            # Handle rollback
+            if [ "${{ inputs.action }}" == "rollback" ] && [ "${{ inputs.service }}" != "all" ]; then
+              echo "Rolling back ${{ inputs.service }} to version ${{ inputs.version }}"
+              export ${{ inputs.service }}_VERSION=${{ inputs.version }}
+              docker pull ghcr.io/${{ secrets.GITHUB_USERNAME }}/${{ inputs.service }}:${{ inputs.version }}
+              docker-compose up -d ${{ inputs.service }} --no-deps
+              exit 0
+            fi
+
+            # Normal deployment
+            if [ "${{ inputs.service }}" == "all" ]; then
+              docker-compose pull
+              docker-compose up -d
+            else
+              docker-compose pull ${{ inputs.service }}
+              docker-compose up -d ${{ inputs.service }} --no-deps
+            fi
+
+            # Show status
+            docker-compose ps
+            echo "Deployment completed!"
+
+      - name: Health Check
+        if: ${{ inputs.action != 'initial-setup' }}
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/infrastructure
+            sleep 10
+            docker-compose ps
+
+            # Check if services are healthy
+            if [ "${{ inputs.service }}" != "traefik" ]; then
+              curl -f http://localhost/ || echo "Pretty app health check"
+              curl -f http://localhost:3001/ || echo "People app health check"
+            fi
